@@ -68,6 +68,7 @@ def embed(ids, W_E):
     Hint: NumPy can index an array with a list of row numbers.
     """
     # YOUR CODE HERE
+    return W_E[np.asarray(ids)]
     raise NotImplementedError
 
 
@@ -91,6 +92,8 @@ def add_positions(X, W_pos):
                                         [3, 4]]
     """
     # YOUR CODE HERE
+    n = X.shape[0]
+    return X + W_pos[:n]
     raise NotImplementedError
 
 # ============================================================================
@@ -118,7 +121,8 @@ def mlp(x, W_up, b_up, W_down, b_down):
 
     Use the provided gelu() from lab_utils.
     """
-    # YOUR CODE HERE
+    #code below
+    return gelu(x @ W_up + b_up) @ W_down + b_down
     raise NotImplementedError
 
 # ============================================================================
@@ -154,6 +158,10 @@ def transformer_block(x, block):
     Sanity check: if attention and the MLP both returned all zeros, the output would equal x.
     """
     # YOUR CODE HERE
+    x = x + attention_block(layer_norm(x, block["ln1_g"], block["ln1_b"]), block)
+    x = x + mlp(layer_norm(x, block["ln2_g"], block["ln2_b"]),
+                block["W_up"], block["b_up"], block["W_down"], block["b_down"])
+    return x
     raise NotImplementedError
 
 # ============================================================================
@@ -180,6 +188,7 @@ def unembed(x, W_E):
         unembed(x, W_E)   ->   [[1, 2, 6]]
     """
     # YOUR CODE HERE
+    return x @ W_E.T 
     raise NotImplementedError
 
 # ============================================================================
@@ -209,7 +218,12 @@ def forward(ids, params):
     Example:
         forward(enc.encode("The old cat"), params).shape   ->   (3, 50257)
     """
-    # YOUR CODE HERE
+    x = embed(ids, params["W_E"])
+    x = add_positions(x, params["W_pos"])
+    for block in params["blocks"]:
+        x = transformer_block(x, block)
+    x = layer_norm(x, params["lnf_g"], params["lnf_b"])
+    return unembed(x, params["W_E"])
     raise NotImplementedError
 
 # ============================================================================
@@ -237,7 +251,10 @@ def softmax(z, T=1.0):
     Hints: convert first with np.asarray(z, dtype=np.float64), divide by T, and subtract
            z.max(axis=-1, keepdims=True) before np.exp so big logits don't overflow.
     """
-    # YOUR CODE HERE
+    z = np.asarray(z, dtype=np.float64) / T
+    z = z - z.max(axis=-1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=-1, keepdims=True)
     raise NotImplementedError
 
 # ============================================================================
@@ -263,8 +280,12 @@ def sample(probs, greedy=False, rng=None):
 
     Hints: np.argmax; rng.choice(len(probs), p=probs). Return a plain int, e.g. int(...).
     """
+    
+
     rng = rng or np.random.default_rng()
-    # YOUR CODE HERE
+    if greedy:
+        return int(np.argmax(probs))
+    return int(rng.choice(len(probs), p=probs))
     raise NotImplementedError
 
 
@@ -294,7 +315,16 @@ def generate(prompt, max_new_tokens=20, T=1.0, greedy=False):
         generate("The old cat sat on the", max_new_tokens=3, greedy=True)
             ->   "The old cat sat on the" + 3 more tokens   (the exact words depend on the model)
     """
-    # YOUR CODE HERE
+    
+    ids = enc.encode(prompt)
+    for _ in range(max_new_tokens):
+        logits = forward(ids, params)
+        probs = softmax(logits[-1], T)
+        next_id = sample(probs, greedy)
+        if next_id == EOS:
+            break
+        ids.append(next_id)
+    return enc.decode(ids)
     raise NotImplementedError
 
 
